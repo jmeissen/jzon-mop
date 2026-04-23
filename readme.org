@@ -45,11 +45,15 @@ After installing, run in the qlot environment:
       :subtype some-listed-object))
     (:metaclass jzon-mop-model-class))
 
-  (funcall (make-object-parser-for-class 'my-parseable) *my-source*)
+  (funcall (make-object-parser-for-class 'my-parseable (find-package 'cl-user)) *my-source*)
   ;; => #<MY-PARSEABLE>
 #+END_SRC
 
 As the example above shows, parsing lists of values is easily defined in the class.
+
+Note: when calling the parser from outside the package in which the class lives, you
+should provide the package name for the defined class otherwise the function is when
+called outside of the package.
 
 A default assumption is that JSON-keys are snake_cased. However, your json may not
 behave such as this exactly, or at all. By default, ~symbol-munger~ is installed
@@ -84,7 +88,7 @@ For example:
                        (symbol-munger:underscores->lisp-symbol string-arg)))))
 
 
-  (funcall (make-object-parser-for-class 'some-weird-keys) *my-source*)
+  (funcall (make-object-parser-for-class 'some-weird-keys (find-package 'cl-user)) *my-source*)
   ; => #<SOME-WEIRD-KEYS>
 #+END_SRC
 
