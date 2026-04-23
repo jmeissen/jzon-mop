@@ -1,0 +1,99 @@
+* jzon-mop
+
+** Description
+JSON source to object mapping, using ~com.inuoe.jzon~. It is primarily meant as a
+non-intrusive wrapper for existing classes and known sources. Surely, hash-tables are
+fine, but I often like classes better. So here's a small MOP library that allows json
+parsing directly to objects instead of hash-tables.
+
+Serializing is quite easy with ~jzon~, and parsing is as well - unless you want
+something different than hash-tables for objects. This approach makes parsing
+(mostly) interchangeable with calling a regular ~jzon:parse~, but directly converts
+the json object tokens into the expected lisp objects.
+
+
+** Install
+
+*** Qlot
+#+BEGIN_SRC bash
+  qlot add github jmeissen/jzon-mop
+#+END_SRC
+
+After installing, run in the qlot environment:
+#+BEGIN_SRC lisp
+  (ql:quickload :jzon-mop)
+#+END_SRC
+
+** Usage
+
+#+BEGIN_SRC lisp
+  (in-package #:cl-user)
+
+  (use-package 'jzon-mop)
+
+  (defvar *my-source* "{\"data\": [{\"this_val\": 1, \"that_val\": 2}]}"
+    "A string, stream, pathname, etc.")
+
+  (defclass some-listed-object ()
+    (this-val
+     that-val)
+    (:metaclass jzon-mop-model-class))
+
+  (defclass my-parseable ()
+    ((data
+      :type vector
+      :subtype some-listed-object))
+    (:metaclass jzon-mop-model-class))
+
+  (funcall (make-object-parser-for-class 'my-parseable) *my-source*)
+  ;; => #<MY-PARSEABLE>
+#+END_SRC
+
+As the example above shows, parsing lists of values is easily defined in the class.
+
+A default assumption is that JSON-keys are snake_cased. However, your json may not
+behave such as this exactly, or at all. By default, ~symbol-munger~ is installed
+which handles =snake_case= to =kebab-case-slot-name= conversion. Since JSON-keys are
+dynamically mapped to their corresponding =kebab-case-slot-name=, you may provide a
+custom ~:key-parser~ which takes precedence for the particular class over the default
+function defined in ~*default-key-parser*~.
+
+For example:
+
+#+BEGIN_SRC lisp
+  (defvar *my-source* "{\"underscored_name\": \"some value\", \"fromCamelCase\": \"some other value\"}")
+
+  (use-package 'jzon-mop)
+
+  (defun weird-key-parser (string-arg)
+    (if (string= "fromCamelCase" string-arg)
+        (symbol-munger:camel-case->lisp-symbol string-arg)
+        (symbol-munger:underscores->lisp-symbol string-arg)))
+
+  (defclass some-weird-keys ()
+    ((underscored-name
+      :initarg :underscored-name
+      :accessor some-weird-keys-underscored-name)
+     (from-camel-case
+      :initarg :from-camel-case
+      :accessor some-weird-keys-from-camel-case))
+    (:metaclass jzon-mop-model-class)
+    (:key-parser (lambda (string-arg)
+                   (if (string= "fromCamelCase" string-arg)
+                       (symbol-munger:camel-case->lisp-symbol string-arg)
+                       (symbol-munger:underscores->lisp-symbol string-arg)))))
+
+
+  (funcall (make-object-parser-for-class 'some-weird-keys) *my-source*)
+  ; => #<SOME-WEIRD-KEYS>
+#+END_SRC
+
+So in this instance, "fromCamelCase" is parsed correctly even though the default is
+snake_case is default.
+
+~:key-parser~ can be a symbol, a lambda, or nil. Note that values are not evaluated
+at compile-time, meaning that the lambda is eval'd at runtime. It's only here for
+convenience, but it is probably not fast. Providing a symbol that references a
+predefined function is probably a better choice.
+
+That's it. Happy hacking!
