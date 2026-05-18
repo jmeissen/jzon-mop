@@ -1,19 +1,18 @@
 * jzon-mop
 
+Tested on ECL and SBCL.
+
 ** Description
 JSON source to object mapping, using ~com.inuoe.jzon~. It is primarily meant as a
 non-intrusive wrapper for existing classes and known sources. Surely, hash-tables are
-fine, but I often like classes better. So here's a small MOP library that allows json
+fine, but I often like classes better. So here's a small MOP library that allows JSON
 parsing directly to objects instead of hash-tables.
 
 Serializing is quite easy with ~jzon~, and parsing is as well - unless you want
 something different than hash-tables for objects. This approach makes parsing
 (mostly) interchangeable with calling a regular ~jzon:parse~, but directly converts
-the json object tokens into the expected lisp objects.
-
-
+the JSON object tokens into the expected lisp objects.
 ** Install
-
 *** Qlot
 #+BEGIN_SRC bash
   qlot add github jmeissen/jzon-mop
@@ -25,6 +24,10 @@ After installing, run in the qlot environment:
 #+END_SRC
 
 ** Usage
+
+Essentially:
+- Metaclass ~jzon-mop:jzon-mop-model-class~
+- Parsing with ~jzon-mop:parse~
 
 #+BEGIN_SRC lisp
   (in-package #:cl-user)
@@ -45,17 +48,17 @@ After installing, run in the qlot environment:
       :subtype some-listed-object))
     (:metaclass jzon-mop-model-class))
 
-  (funcall (make-object-parser-for-class 'my-parseable (find-package 'cl-user)) *my-source*)
+  (jzon-mop:parse *my-source* 'my-parseable (find-package 'cl-user))
   ;; => #<MY-PARSEABLE>
 #+END_SRC
 
-As the example above shows, parsing lists of values is easily defined in the class.
+As the example above shows, parsing arrays of objects is possible through ~:subtype~.
 
 Note: when calling the parser from outside the package in which the class lives, you
 should provide the package name for the defined class otherwise the function is when
 called outside of the package.
 
-A default assumption is that JSON-keys are snake_cased. However, your json may not
+A default assumption is that JSON-keys are snake_cased. However, your JSON may not
 behave such as this exactly, or at all. By default, ~symbol-munger~ is installed
 which handles =snake_case= to =kebab-case-slot-name= conversion. Since JSON-keys are
 dynamically mapped to their corresponding =kebab-case-slot-name=, you may provide a
@@ -88,7 +91,7 @@ For example:
                        (symbol-munger:underscores->lisp-symbol string-arg)))))
 
 
-  (funcall (make-object-parser-for-class 'some-weird-keys (find-package 'cl-user)) *my-source*)
+  (jzon-mop:parse *my-source* 'some-weird-keys (find-package 'cl-user))
   ; => #<SOME-WEIRD-KEYS>
 #+END_SRC
 
@@ -100,4 +103,18 @@ at compile-time, meaning that the lambda is eval'd at runtime. It's only here fo
 convenience, but it is probably not fast. Providing a symbol that references a
 predefined function is probably a better choice.
 
+Unless specified, the JSON-objects will be parsed as hash-tables, so mixing these is
+fine. However, if you leave an object as hash-table, then there's no way to parse its
+children into objects.
+
+Finally, the parser knows what to do when encountering top-level arrays. However, when
+the children differ in object type, then there's a currently unresolvable problem.
+
 That's it. Happy hacking!
+
+** Contributing
+*** Run tests
+#+BEGIN_SRC shell
+  qlot install
+  qlot exec sbcl --disable-debugger --eval '(asdf:test-system :jzon-mop)' --quit
+#+END_SRC

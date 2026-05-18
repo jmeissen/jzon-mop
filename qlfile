@@ -1,5 +1,5 @@
 ultralisp 40ants-log4sly
 ql jzon
-ql serapeum
 ql symbol-munger
 ql closer-mop
+ql parachute

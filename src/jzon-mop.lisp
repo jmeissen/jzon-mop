@@ -2,9 +2,6 @@
 
 (uiop:define-package jzon-mop/jzon-mop
   (:use #:cl)
-  (:import-from #:serapeum
-                #:dict
-                #:href)
   (:import-from #:symbol-munger
                 #:underscores->lisp-symbol)
   (:import-from #:com.inuoe.jzon
@@ -26,7 +23,8 @@
               #:jzop)
   (:export #:*default-key-parser*
            #:jzon-mop-model-class
-           #:make-object-parser-for-class))
+           #:make-object-parser-for-class
+           #:parse))
 
 (in-package #:jzon-mop/jzon-mop)
 
@@ -50,10 +48,10 @@
     :reader model-key-parser
     :initform nil)
    (slot-by-symbol
-    :initform (dict)
+    :initform (make-hash-table :test #'equal)
     :reader model-slot-by-symbol)
    (child-class-by-symbol
-    :initform (dict)
+    :initform (make-hash-table :test #'equal)
     :reader model-child-class-by-symbol)))
 
 (defmethod validate-superclass ((class jzon-mop-model-class) (superclass standard-class)) t)
@@ -96,17 +94,17 @@
       (let* ((slot-name (slot-definition-name slot))
              (type (slot-definition-type slot))
              (subtype (and (typep slot 'jzon-mop-effective-slot-definition) (jzon-mop-slot-subtype slot))))
-        (setf (href slot-by-symbol slot-name) slot)
+        (setf (gethash slot-name slot-by-symbol) slot)
         (when (and (or (eq type 'vector)
                        (eq type 'list)
                        (eq type 'sequence)
                        (eq type 'array))
                    subtype)
-          (setf (href child-by-symbol slot-name) subtype))
+          (setf (gethash slot-name child-by-symbol) subtype))
         (when (and (not (member type '(vector list sequence array) :test #'eq))
                    (symbolp type)
                    (find-class type nil))
-          (setf (href child-by-symbol slot-name) type)))))
+          (setf (gethash slot-name child-by-symbol) type)))))
   class)
 
 (defmethod finalize-inheritance :after ((class jzon-mop-model-class))
@@ -114,13 +112,13 @@
 
 (defun model-slot-for-json-key (class-symbol key-string &optional (package *package*))
   (let ((class (find-class class-symbol)))
-    (href (model-slot-by-symbol class)
-          (model-key->symbol class key-string package))))
+    (gethash (model-key->symbol class key-string package)
+          (model-slot-by-symbol class))))
 
 (defun model-child-class-for-json-key (class-symbol key-string &optional (package *package*))
   (let ((class (find-class class-symbol)))
-    (href (model-child-class-by-symbol class)
-          (model-key->symbol class key-string package))))
+    (gethash (model-key->symbol class key-string package)
+             (model-child-class-by-symbol class))))
 
 (defun set-model-slot-by-slot-definition (instance slot-definition value)
   (when slot-definition
@@ -183,46 +181,46 @@ Returns a function takes the same arguments as `jzon:parse'."
          (if (member expected-class '(nil t hash-table) :test #'eq)
              (parse-hash-table-object parser)
              (let ((instance (allocate-instance (find-class expected-class)))
-               (current-key-string nil)
-               (current-slot nil)
-               (current-child-class nil))
-             (loop
-               (multiple-value-bind (event value) (parse-next parser)
-                 (cond
-                   ((eq event :object-key)
-                    (setf current-key-string value)
-                    (setf current-slot (model-slot-for-json-key expected-class
-                                                                current-key-string
-                                                                package))
-                    (setf current-child-class (model-child-class-for-json-key expected-class
-                                                                              current-key-string
-                                                                              package)))
-                   ((eq event :end-object) (return instance))
-                   ((eq event :value)
-                    (if current-slot
-                        (set-model-slot-by-slot-definition instance current-slot value)
-                        nil)
-                    (setf current-key-string nil current-slot nil current-child-class nil))
-                   ((eq event :begin-array)
-                    (if current-slot
-                        (let* ((element-class (or current-child-class 'hash-table))
-                               (array-value (parse-array parser element-class)))
-                          (set-model-slot-by-slot-definition instance current-slot array-value))
-                        (error "Unexpected object start for ~A" current-key-string))
-                    (setf current-key-string nil
-                          current-slot nil
-                          current-child-class nil))
-                   ((eq event :begin-object)
-                    (if current-slot
-                        (set-model-slot-by-slot-definition
-                         instance current-slot
-                         (parse-object parser (or current-child-class 'hash-table)))
-                        (error "Unexpected object start for ~A" current-key-string))
-                    (setf current-key-string nil
-                          current-slot nil
-                          current-child-class nil))
-                   (t
-                    (error "Unexpected JSON event in object: ~S" event)))))))))
+                   (current-key-string nil)
+                   (current-slot nil)
+                   (current-child-class nil))
+               (loop
+                 (multiple-value-bind (event value) (parse-next parser)
+                   (cond
+                     ((eq event :object-key)
+                      (setf current-key-string value)
+                      (setf current-slot (model-slot-for-json-key expected-class
+                                                                  current-key-string
+                                                                  package))
+                      (setf current-child-class (model-child-class-for-json-key expected-class
+                                                                                current-key-string
+                                                                                package)))
+                     ((eq event :end-object) (return instance))
+                     ((eq event :value)
+                      (if current-slot
+                          (set-model-slot-by-slot-definition instance current-slot value)
+                          nil)
+                      (setf current-key-string nil current-slot nil current-child-class nil))
+                     ((eq event :begin-array)
+                      (if current-slot
+                          (let* ((element-class (or current-child-class 'hash-table))
+                                 (array-value (parse-array parser element-class)))
+                            (set-model-slot-by-slot-definition instance current-slot array-value))
+                          (error "Unexpected object start for ~A" current-key-string))
+                      (setf current-key-string nil
+                            current-slot nil
+                            current-child-class nil))
+                     ((eq event :begin-object)
+                      (if current-slot
+                          (set-model-slot-by-slot-definition
+                           instance current-slot
+                           (parse-object parser (or current-child-class 'hash-table)))
+                          (error "Unexpected object start for ~A" current-key-string))
+                      (setf current-key-string nil
+                            current-slot nil
+                            current-child-class nil))
+                     (t
+                      (error "Unexpected JSON event in object: ~S" event)))))))))
     (lambda (in &key max-depth allow-comments allow-trailing-comma allow-multiple-content max-string-length key-fn)
       (with-parser (parser in
                            :allow-comments allow-comments
@@ -240,5 +238,8 @@ Returns a function takes the same arguments as `jzon:parse'."
             ((eq event :value)
              (parse-next-element parser :max-depth max-depth))
             (t
-             (error "Unexpected toplevel JSON event: ~S" event))))))
-))
+             (error "Unexpected toplevel JSON event: ~S" event))))))))
+
+(defun parse (source class-symbol &optional (package *package*))
+  (funcall (make-object-parser-for-class class-symbol package)
+           source))
