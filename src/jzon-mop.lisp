@@ -72,7 +72,7 @@
     (let (subtype)
       (dolist (d direct-slot-definitions)
         (let ((s (and (typep d 'jzon-mop-slot-definition) (jzon-mop-slot-subtype d))))
-          q          (when s (setf subtype s))))
+          (when s (setf subtype s))))
       (when (typep effective 'jzon-mop-effective-slot-definition)
         (setf (slot-value effective 'subtype) subtype)))
     effective))
@@ -152,48 +152,77 @@ Returns a function takes the same arguments as `jzon:parse'."
                   (push (parse-object parser element-class) elements))
                  (t
                   (error "Unexpected JSON event in array: ~S" event)))))))
-       (parse-object (parser expected-class)
-         (let ((instance (allocate-instance (find-class expected-class)))
-               (current-key-string nil)
-               (current-slot nil)
-               (current-child-class nil))
+       (parse-hash-table-object (parser)
+         (let ((instance (make-hash-table :test #'equal))
+               (current-key-string nil))
            (loop
              (multiple-value-bind (event value) (parse-next parser)
                (cond
                  ((eq event :object-key)
-                  (setf current-key-string value)
-                  (setf current-slot (model-slot-for-json-key expected-class
-                                                              current-key-string
-                                                              package))
-                  (setf current-child-class (model-child-class-for-json-key expected-class
-                                                                            current-key-string
-                                                                            package)))
+                  (setf current-key-string value))
                  ((eq event :end-object) (return instance))
                  ((eq event :value)
-                  (if current-slot
-                      (set-model-slot-by-slot-definition instance current-slot value)
-                      nil)
-                  (setf current-key-string nil current-slot nil current-child-class nil))
+                  (when current-key-string
+                    (setf (gethash current-key-string instance) value))
+                  (setf current-key-string nil))
                  ((eq event :begin-array)
-                  (if current-slot
-                      (let* ((element-class (or current-child-class expected-class))
-                             (array-value (parse-array parser element-class)))
-                        (set-model-slot-by-slot-definition instance current-slot array-value))
+                  (if current-key-string
+                      (setf (gethash current-key-string instance)
+                            (parse-array parser 'hash-table))
                       (error "Unexpected object start for ~A" current-key-string))
-                  (setf current-key-string nil
-                        current-slot nil
-                        current-child-class nil))
+                  (setf current-key-string nil))
                  ((eq event :begin-object)
-                  (if current-slot
-                      (set-model-slot-by-slot-definition
-                       instance current-slot
-                       (parse-object parser (or current-child-class expected-class)))
+                  (if current-key-string
+                      (setf (gethash current-key-string instance)
+                            (parse-hash-table-object parser))
                       (error "Unexpected object start for ~A" current-key-string))
-                  (setf current-key-string nil
-                        current-slot nil
-                        current-child-class nil))
+                  (setf current-key-string nil))
                  (t
-                  (error "Unexpected JSON event in object: ~S" event))))))))
+                  (error "Unexpected JSON event in object: ~S" event)))))))
+       (parse-object (parser expected-class)
+         (if (member expected-class '(nil t hash-table) :test #'eq)
+             (parse-hash-table-object parser)
+             (let ((instance (allocate-instance (find-class expected-class)))
+               (current-key-string nil)
+               (current-slot nil)
+               (current-child-class nil))
+             (loop
+               (multiple-value-bind (event value) (parse-next parser)
+                 (cond
+                   ((eq event :object-key)
+                    (setf current-key-string value)
+                    (setf current-slot (model-slot-for-json-key expected-class
+                                                                current-key-string
+                                                                package))
+                    (setf current-child-class (model-child-class-for-json-key expected-class
+                                                                              current-key-string
+                                                                              package)))
+                   ((eq event :end-object) (return instance))
+                   ((eq event :value)
+                    (if current-slot
+                        (set-model-slot-by-slot-definition instance current-slot value)
+                        nil)
+                    (setf current-key-string nil current-slot nil current-child-class nil))
+                   ((eq event :begin-array)
+                    (if current-slot
+                        (let* ((element-class (or current-child-class 'hash-table))
+                               (array-value (parse-array parser element-class)))
+                          (set-model-slot-by-slot-definition instance current-slot array-value))
+                        (error "Unexpected object start for ~A" current-key-string))
+                    (setf current-key-string nil
+                          current-slot nil
+                          current-child-class nil))
+                   ((eq event :begin-object)
+                    (if current-slot
+                        (set-model-slot-by-slot-definition
+                         instance current-slot
+                         (parse-object parser (or current-child-class 'hash-table)))
+                        (error "Unexpected object start for ~A" current-key-string))
+                    (setf current-key-string nil
+                          current-slot nil
+                          current-child-class nil))
+                   (t
+                    (error "Unexpected JSON event in object: ~S" event)))))))))
     (lambda (in &key max-depth allow-comments allow-trailing-comma allow-multiple-content max-string-length key-fn)
       (with-parser (parser in
                            :allow-comments allow-comments
@@ -211,4 +240,5 @@ Returns a function takes the same arguments as `jzon:parse'."
             ((eq event :value)
              (parse-next-element parser :max-depth max-depth))
             (t
-             (error "Unexpected toplevel JSON event: ~S" event))))))))
+             (error "Unexpected toplevel JSON event: ~S" event))))))
+))
