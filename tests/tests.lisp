@@ -26,7 +26,7 @@
   (:key-parser mixed-key-parser))
 
 (defun parse-json (class json)
-  (funcall (make-object-parser-for-class class (find-package :jzon-mop-test))
+  (funcall (make-object-parser-for-class class)
            json))
 
 (defun mixed-key-parser (string)

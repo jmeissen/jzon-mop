@@ -32,31 +32,25 @@ Essentially:
 #+BEGIN_SRC lisp
   (in-package #:cl-user)
 
-  (use-package 'jzon-mop)
-
   (defvar *my-source* "{\"data\": [{\"this_val\": 1, \"that_val\": 2}]}"
     "A string, stream, pathname, etc.")
 
   (defclass some-listed-object ()
     (this-val
      that-val)
-    (:metaclass jzon-mop-model-class))
+    (:metaclass jzon-mop:jzon-mop-model-class))
 
   (defclass my-parseable ()
     ((data
       :type vector
       :subtype some-listed-object))
-    (:metaclass jzon-mop-model-class))
+    (:metaclass jzon-mop:jzon-mop-model-class))
 
-  (jzon-mop:parse *my-source* 'my-parseable (find-package 'cl-user))
+  (jzon-mop:parse *my-source* 'my-parseable)
   ;; => #<MY-PARSEABLE>
 #+END_SRC
 
 As the example above shows, parsing arrays of objects is possible through ~:subtype~.
-
-Note: when calling the parser from outside the package in which the class lives, you
-should provide the package name for the defined class otherwise the function is when
-called outside of the package.
 
 A default assumption is that JSON-keys are snake_cased. However, your JSON may not
 behave such as this exactly, or at all. By default, ~symbol-munger~ is installed
@@ -70,8 +64,6 @@ For example:
 #+BEGIN_SRC lisp
   (defvar *my-source* "{\"underscored_name\": \"some value\", \"fromCamelCase\": \"some other value\"}")
 
-  (use-package 'jzon-mop)
-
   (defun weird-key-parser (string-arg)
     (if (string= "fromCamelCase" string-arg)
         (symbol-munger:camel-case->lisp-symbol string-arg)
@@ -84,14 +76,14 @@ For example:
      (from-camel-case
       :initarg :from-camel-case
       :accessor some-weird-keys-from-camel-case))
-    (:metaclass jzon-mop-model-class)
+    (:metaclass jzon-mop:jzon-mop-model-class)
     (:key-parser (lambda (string-arg)
                    (if (string= "fromCamelCase" string-arg)
                        (symbol-munger:camel-case->lisp-symbol string-arg)
                        (symbol-munger:underscores->lisp-symbol string-arg)))))
 
 
-  (jzon-mop:parse *my-source* 'some-weird-keys (find-package 'cl-user))
+  (jzon-mop:parse *my-source* 'some-weird-keys)
   ; => #<SOME-WEIRD-KEYS>
 #+END_SRC
 

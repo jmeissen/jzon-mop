@@ -75,10 +75,10 @@
         (setf (slot-value effective 'subtype) subtype)))
     effective))
 
-(defun model-key->symbol (model-class key-string &optional (package *package*))
+(defun model-key->symbol (model-class key-string)
   (let ((parser (car (model-key-parser model-class))))
     (cond
-      ((null parser) (funcall *default-key-parser* key-string package))
+      ((null parser) (funcall *default-key-parser* key-string (symbol-package (class-name model-class))))
       ((symbolp parser) (funcall (symbol-function parser) key-string))
       ((functionp parser) (funcall parser key-string))
       ((and (consp parser)
@@ -110,14 +110,14 @@
 (defmethod finalize-inheritance :after ((class jzon-mop-model-class))
   (finalize-model-class-caches class))
 
-(defun model-slot-for-json-key (class-symbol key-string &optional (package *package*))
+(defun model-slot-for-json-key (class-symbol key-string)
   (let ((class (find-class class-symbol)))
-    (gethash (model-key->symbol class key-string package)
-          (model-slot-by-symbol class))))
+    (gethash (model-key->symbol class key-string)
+             (model-slot-by-symbol class))))
 
-(defun model-child-class-for-json-key (class-symbol key-string &optional (package *package*))
+(defun model-child-class-for-json-key (class-symbol key-string)
   (let ((class (find-class class-symbol)))
-    (gethash (model-key->symbol class key-string package)
+    (gethash (model-key->symbol class key-string)
              (model-child-class-by-symbol class))))
 
 (defun set-model-slot-by-slot-definition (instance slot-definition value)
@@ -125,13 +125,10 @@
     (setf (slot-value instance (slot-definition-name slot-definition)) value))
   instance)
 
-(defun make-object-parser-for-class (toplevel-class-symbol &optional (package *package*))
+(defun make-object-parser-for-class (toplevel-class-symbol)
   "Create a function that parses the TOPLEVEL-CLASS-SYMBOL
 
 TOPLEVEL-CLASS-SYMBOL is the class-name symbol.
-
-PACKAGE is the optional package name in which the class-name symbol
- resides (if different that *PACKAGE*).
 
 Returns a function takes the same arguments as `jzon:parse'."
   (labels
@@ -189,12 +186,8 @@ Returns a function takes the same arguments as `jzon:parse'."
                    (cond
                      ((eq event :object-key)
                       (setf current-key-string value)
-                      (setf current-slot (model-slot-for-json-key expected-class
-                                                                  current-key-string
-                                                                  package))
-                      (setf current-child-class (model-child-class-for-json-key expected-class
-                                                                                current-key-string
-                                                                                package)))
+                      (setf current-slot (model-slot-for-json-key expected-class current-key-string))
+                      (setf current-child-class (model-child-class-for-json-key expected-class current-key-string)))
                      ((eq event :end-object) (return instance))
                      ((eq event :value)
                       (if current-slot
@@ -240,6 +233,6 @@ Returns a function takes the same arguments as `jzon:parse'."
             (t
              (error "Unexpected toplevel JSON event: ~S" event))))))))
 
-(defun parse (source class-symbol &optional (package *package*))
-  (funcall (make-object-parser-for-class class-symbol package)
+(defun parse (source class-symbol)
+  (funcall (make-object-parser-for-class class-symbol)
            source))
