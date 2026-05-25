@@ -3,7 +3,7 @@
 (uiop:define-package jzon-mop/jzon-mop
   (:use #:cl)
   (:import-from #:symbol-munger
-                #:underscores->lisp-symbol)
+                #:camel-case->lisp-symbol)
   (:import-from #:com.inuoe.jzon
                 #:parse-next
                 #:parse-next-element
@@ -28,7 +28,7 @@
 
 (in-package #:jzon-mop/jzon-mop)
 
-(defvar *default-key-parser* #'underscores->lisp-symbol)
+(defvar *default-key-parser* #'camel-case->lisp-symbol)
 
 (defclass jzon-mop-slot-definition (standard-direct-slot-definition)
   ((subtype
@@ -77,13 +77,19 @@
 
 (defun model-key->symbol (model-class key-string)
   (let ((parser (car (model-key-parser model-class))))
-    (cond
-      ((null parser) (funcall *default-key-parser* key-string (symbol-package (class-name model-class))))
-      ((symbolp parser) (funcall (symbol-function parser) key-string))
-      ((functionp parser) (funcall parser key-string))
-      ((and (consp parser)
-            (eq 'lambda (car parser))) (funcall (eval parser) key-string))
-      (t (error "Unknown parser type ~S" parser)))))
+    (funcall
+     (cond ((null parser)
+            *default-key-parser*)
+           ((symbolp parser)
+            (symbol-function parser))
+           ((functionp parser)
+            parser)
+           ((and (consp parser)
+                 (eq 'lambda (car parser)))
+            (eval parser))
+           (t (error "Unknown key parser type ~S" (type-of parser))))
+     key-string
+     (symbol-package (class-name model-class)))))
 
 (defun finalize-model-class-caches (class)
   (let ((slot-by-symbol (model-slot-by-symbol class))

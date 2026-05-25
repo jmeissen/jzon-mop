@@ -90,17 +90,24 @@ For example:
 So in this instance, "fromCamelCase" is parsed correctly even though the default is
 snake_case is default.
 
-~:key-parser~ can be a symbol, a lambda, or nil. Note that values are not evaluated
-at compile-time, meaning that the lambda is eval'd at runtime. It's only here for
-convenience, but it is probably not fast. Providing a symbol that references a
-predefined function is probably a better choice.
+*** Customizing the ~:key-parser~
+The default object key parser is defined in ~jzon-mop:*default-key-parser*~. This
+function-symbol takes two arguments: ~key-string~ and
+~package~. ~*default-key-parser*~ may be overwritten, but for a more specific
+functioning, it may also be supplied per-class in the class-option ~:key-parser~.
 
+The class-option ~:key-parser~ can be a symbol, a lambda, or nil. Note that values
+are not evaluated at compile-time, meaning that the lambda is eval'd at runtime. It's
+only here for convenience, but it is probably not fast. Providing a symbol that
+references a predefined function is probably a better choice.
+
+*** Quirks
 Unless specified, the JSON-objects will be parsed as hash-tables, so mixing these is
 fine. However, if you leave an object as hash-table, then there's no way to parse its
 children into objects.
 
 Finally, the parser knows what to do when encountering top-level arrays. However, when
-the children differ in object type, then there's a currently unresolvable problem.
+the children differ in object type, then there's an unresolvable problem.
 
 That's it. Happy hacking!
 

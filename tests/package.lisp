@@ -3,5 +3,5 @@
 (uiop:define-package #:jzon-mop-test
   (:use #:cl #:parachute)
   (:import-from #:jzon-mop
-                #:make-object-parser-for-class
+                #:parse
                 #:jzon-mop-model-class))

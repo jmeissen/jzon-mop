@@ -26,13 +26,41 @@
   (:key-parser mixed-key-parser))
 
 (defun parse-json (class json)
-  (funcall (make-object-parser-for-class class)
-           json))
+  (parse json class))
 
-(defun mixed-key-parser (string)
-  (if (string= string "fromCamelCase")
-      (intern "FROM-CAMEL-CASE" (find-package :jzon-mop-test))
-      (symbol-munger:underscores->lisp-symbol string (find-package :jzon-mop-test))))
+(defun camelcase-key-parser (string package)
+  (symbol-munger:camel-case->lisp-symbol string package))
+
+(defun mixed-key-parser (string package)
+  (if (find #\_ string)
+      (symbol-munger:underscores->lisp-symbol string package)
+      (camelcase-key-parser string package)))
+
+(defclass camelcase-key-record ()
+  ((from-camel-case
+    :accessor camelcase-key-record-from-camel-case))
+  (:metaclass jzon-mop-model-class)
+  (:key-parser camelcase-key-parser))
+
+(define-test parses-camelcase-key-parser
+    (let ((record (parse-json 'camelcase-key-record
+                              "{\"fromCamelCase\":\"ok\"}")))
+      (is equal "ok" (camelcase-key-record-from-camel-case record))))
+
+(define-test fails-to-parse-underscored-key-with-camelcase-key-parser
+    (let ((record (parse-json 'camelcase-key-record
+                              "{\"from_camel_case\":\"ok\"}")))
+      (is equal "ok" (camelcase-key-record-from-camel-case record))))
+
+(define-test fails-to-parse-mixed-camelcase-key-with-custom-key-parser
+    (let ((record (parse-json 'mixed-key-record
+                              "{\"fromCamelcase\":\"still-nope\"}")))
+      (is eq t
+          (handler-case
+              (progn
+                (mixed-key-record-from-camel-case record)
+                nil)
+            (unbound-slot () t)))))
 
 (define-test parses-simple-object
   (let ((item (parse-json 'record-item "{\"this_val\":1,\"that_val\":2}")))
