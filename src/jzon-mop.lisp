@@ -22,6 +22,7 @@
   (:nicknames #:jzon-mop
               #:jzop)
   (:export #:*default-key-parser*
+           #:*warn-on-missing-slots*
            #:jzon-mop-model-class
            #:make-object-parser-for-class
            #:parse))
@@ -29,6 +30,9 @@
 (in-package #:jzon-mop/jzon-mop)
 
 (defvar *default-key-parser* #'camel-case->lisp-symbol)
+
+(defvar *warn-on-missing-slots* t
+  "When true, missing model slots signal a warning instead of an error.")
 
 (defclass jzon-mop-slot-definition (standard-direct-slot-definition)
   ((subtype
@@ -131,6 +135,11 @@
     (setf (slot-value instance (slot-definition-name slot-definition)) value))
   instance)
 
+(defun signal-missing-slot (class-symbol key-string)
+  (if *warn-on-missing-slots*
+      (warn "Non-existent slot \"~A\" for \"~S\"" key-string class-symbol)
+      (error "Non-existent slot \"~A\" for \"~S\"" key-string class-symbol)))
+
 (defun make-object-parser-for-class (toplevel-class-symbol)
   "Create a function that parses the TOPLEVEL-CLASS-SYMBOL
 
@@ -198,14 +207,16 @@ Returns a function takes the same arguments as `jzon:parse'."
                      ((eq event :value)
                       (if current-slot
                           (set-model-slot-by-slot-definition instance current-slot value)
-                          nil)
+                          (signal-missing-slot expected-class current-key-string))
                       (setf current-key-string nil current-slot nil current-child-class nil))
                      ((eq event :begin-array)
                       (if current-slot
                           (let* ((element-class (or current-child-class 'hash-table))
                                  (array-value (parse-array parser element-class)))
                             (set-model-slot-by-slot-definition instance current-slot array-value))
-                          (error "Unexpected object start for ~A" current-key-string))
+                          (progn
+                            (signal-missing-slot expected-class current-key-string)
+                            (parse-array parser 'hash-table)))
                       (setf current-key-string nil
                             current-slot nil
                             current-child-class nil))
@@ -214,7 +225,9 @@ Returns a function takes the same arguments as `jzon:parse'."
                           (set-model-slot-by-slot-definition
                            instance current-slot
                            (parse-object parser (or current-child-class 'hash-table)))
-                          (error "Unexpected object start for ~A" current-key-string))
+                          (progn
+                            (signal-missing-slot expected-class current-key-string)
+                            (parse-object parser 'hash-table)))
                       (setf current-key-string nil
                             current-slot nil
                             current-child-class nil))

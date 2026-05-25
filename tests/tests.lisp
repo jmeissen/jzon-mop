@@ -17,6 +17,11 @@
     :type record-item))
   (:metaclass jzon-mop-model-class))
 
+(defclass untyped-array-wrapper ()
+  ((items
+    :accessor untyped-array-wrapper-items))
+  (:metaclass jzon-mop-model-class))
+
 (defclass mixed-key-record ()
   ((underscored-name
     :accessor mixed-key-record-underscored-name)
@@ -86,6 +91,49 @@
     (is = 1 (record-item-this-val (aref (record-wrapper-data wrapper) 0)))
     (is = 3 (record-item-this-val (record-wrapper-primary-item wrapper)))
     (is = 4 (record-item-that-val (record-wrapper-primary-item wrapper)))))
+
+(define-test parses-empty-array-in-untyped-object-slot
+  (let ((wrapper (parse-json 'untyped-array-wrapper
+                             "{\"items\":[]}")))
+    (is eq t (typep (untyped-array-wrapper-items wrapper) 'simple-vector))
+    (is = 0 (length (untyped-array-wrapper-items wrapper)))))
+
+(define-test warns-on-missing-primitive-slot-by-default
+  (let ((warning nil))
+    (handler-bind
+        ((warning (lambda (c)
+                    (setf warning c)
+                    (muffle-warning))))
+      (let ((item (parse-json 'record-item
+                              "{\"this_val\":1,\"missing_val\":99,\"that_val\":2}")))
+        (is eq t (typep warning 'warning))
+        (is = 1 (record-item-this-val item))
+        (is = 2 (record-item-that-val item))))))
+
+(define-test warns-and-skips-missing-nested-slot-by-default
+  (let ((warning nil))
+    (handler-bind
+        ((warning (lambda (c)
+                    (setf warning c)
+                    (muffle-warning))))
+      (let ((wrapper (parse-json 'record-wrapper
+                                 "{\"ignored_items\":[{\"this_val\":9,\"that_val\":10}],\"data\":[{\"this_val\":1,\"that_val\":2}],\"primary_item\":{\"this_val\":3,\"that_val\":4}}")))
+        (is eq t (typep warning 'warning))
+        (is eq t (typep (record-wrapper-data wrapper) 'simple-vector))
+        (is = 1 (length (record-wrapper-data wrapper)))
+        (is = 3 (record-item-this-val (record-wrapper-primary-item wrapper)))
+        (is = 4 (record-item-that-val (record-wrapper-primary-item wrapper)))))))
+
+(define-test errors-on-missing-slot-when-strict
+  (let ((jzon-mop:*warn-on-missing-slots* nil))
+    (declare (special jzon-mop:*warn-on-missing-slots*))
+    (is eq t
+        (handler-case
+            (progn
+              (parse-json 'record-item
+                          "{\"this_val\":1,\"missing_val\":99,\"that_val\":2}")
+              nil)
+          (error () t)))))
 
 (define-test parses-with-custom-key-parser
   (let ((record (parse-json 'mixed-key-record
